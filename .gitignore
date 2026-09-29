@@ -1,0 +1,8 @@
+.env
+target/
+node_modules/
+dist/
+backend/src/main/resources/static/
+*.class
+.idea/
+.vscode/

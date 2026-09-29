@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: cohortlens
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cohortlens}
+    username: ${DB_USER:cohortlens}
+    password: ${DB_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema; Hibernate only checks that it matches
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 500
+        order_inserts: true
+  flyway:
+    enabled: true
+
+cohortlens:
+  # Secrets have NO defaults. The app refuses to start without them (see docs and docker-compose.yml).
+  pseudonym-secret: ${COHORTLENS_PSEUDONYM_SECRET:}
+  admin-password: ${COHORTLENS_ADMIN_PASSWORD:}
+  researcher-password: ${COHORTLENS_RESEARCHER_PASSWORD:}
+  viewer-password: ${COHORTLENS_VIEWER_PASSWORD:}
+  # Groups smaller than this are never shown (small cell suppression).
+  min-cell-size: 10
+  # Largest CSV accepted in one upload, in bytes.
+  max-upload-bytes: 26214400
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never

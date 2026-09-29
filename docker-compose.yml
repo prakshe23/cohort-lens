@@ -1,0 +1,35 @@
+# Starts PostgreSQL and the app. Copy .env.example to .env and set real secrets first.
+# The app refuses to start if any secret is missing.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cohortlens
+      POSTGRES_USER: cohortlens
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cohortlens -d cohortlens"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/cohortlens
+      DB_USER: cohortlens
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      COHORTLENS_PSEUDONYM_SECRET: ${COHORTLENS_PSEUDONYM_SECRET:?set COHORTLENS_PSEUDONYM_SECRET in .env}
+      COHORTLENS_ADMIN_PASSWORD: ${COHORTLENS_ADMIN_PASSWORD:?set COHORTLENS_ADMIN_PASSWORD in .env}
+      COHORTLENS_RESEARCHER_PASSWORD: ${COHORTLENS_RESEARCHER_PASSWORD:?set COHORTLENS_RESEARCHER_PASSWORD in .env}
+      COHORTLENS_VIEWER_PASSWORD: ${COHORTLENS_VIEWER_PASSWORD:?set COHORTLENS_VIEWER_PASSWORD in .env}
+
+volumes:
+  dbdata:

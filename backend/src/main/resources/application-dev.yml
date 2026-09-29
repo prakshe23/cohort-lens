@@ -1,0 +1,13 @@
+# Dev profile: in memory H2 database and throwaway credentials. NEVER use with real student data.
+spring:
+  datasource:
+    url: jdbc:h2:mem:cohortlens;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+
+cohortlens:
+  pseudonym-secret: dev-only-secret-change-me-please
+  admin-password: admin-dev
+  researcher-password: researcher-dev
+  viewer-password: viewer-dev
