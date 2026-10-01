@@ -12,10 +12,6 @@ Education researchers commonly receive administrative data as spreadsheet export
 2. **Provenance.** Cleaning is often done by hand, so the transformations applied to the data are undocumented. This undermines reproducibility and makes it difficult to defend results.
 3. **Privacy.** Direct student identifiers are frequently stored in shared folders, and small subgroups can be re identified when results are reported at fine granularity.
 
-## How I identified the problem
-
-I started from the description of Luddy's Faculty Assistance in Data Science (FADS) program, which lists databases, SQL, data visualization, statistics and Java among its expected competencies. Reading it, I inferred that a common need in faculty research projects is a reliable path from raw administrative data to analysis ready data. I scoped this project to demonstrate that competency on a realistic version of the problem, using synthetic data because real student records cannot be shared.
-
 ## Solution
 
 CohortLens addresses each issue directly.
