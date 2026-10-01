@@ -1,157 +1,75 @@
 # CohortLens
 
-A research data management app and longitudinal analytics dashboard for school data. A lab or a school data team can load messy spreadsheets, get a plain report of what was accepted, fixed or rejected, and then explore trends, subgroup gaps and risk screening without seeing individual students.
-
-The included data is synthetic. No real students, schools or districts appear anywhere in this repository.
+A small tool that cleans messy school data, protects student privacy, and shows trends in a dashboard. All data in this repository is synthetic. No real students, schools or districts appear anywhere.
 
 ![Overview](docs/screenshots/overview.png)
 
-## Why it exists
+## The problem
 
-Researchers outside data science often have a spreadsheet problem before they have an analysis problem: inconsistent files, no record of what was changed, and student identifiers sitting in shared folders. CohortLens is built around three ideas.
+Researchers who study education often get their data as spreadsheets exported from different school systems. Before any analysis can start, they hit three problems:
 
-1. **Cleaning should be visible.** Every upload produces a row by row report. Nothing is silently dropped or silently fixed.
-2. **Privacy by design.** Student ids are replaced with a keyed hash on arrival and the originals are never stored. Groups under 10 students are never displayed.
-3. **Descriptive, honest analytics.** Trends and gaps come with rough intervals and plain statements about what the numbers cannot say.
+1. The files are messy. Scores are blank, attendance is written as 0.93 in one file and 93 in another, and the same student shows up twice.
+2. Nobody can say what was changed during cleaning, so results are hard to trust or repeat.
+3. Student ids sit in shared folders, which is a privacy risk.
 
-## Scope, milestones and deliverables
+## How I found out
 
-Written as a project of roughly 150 hours of effort, the size of a research assistantship.
+I read the description of Luddy's Faculty Assistance in Data Science (FADS) program and the kinds of skills it asks for: databases, SQL, data visualization, statistics and Java. Faculty in that kind of program typically need help getting research data into a clean, trustworthy form before analysis. I built this project to show that skill set on a realistic version of the problem.
 
-| Milestone | Deliverable | Status |
-|---|---|---|
-| 1. Data model and validation | Schema migration, CSV parser, 21 validation checks, pseudonymization, 53 unit tests | Done |
-| 2. Analytics | Trends with intervals, subgroup gaps, small cell suppression, explainable risk score | Done |
-| 3. Service | Spring Boot REST API, JPA, Flyway, roles, audit log, CSV export | Written, see verification below |
-| 4. Dashboard | React and TypeScript, hand built accessible charts, import and validation report | Done |
-| 5. Delivery | Docker Compose with PostgreSQL (written, not built in the environment where this was made), one page summary for non technical readers | Summary done, Docker unverified |
+## The solution
+
+CohortLens does three things:
+
+- **Cleans on upload.** Every uploaded file gets a report that says which rows were accepted, fixed or rejected, and why. Nothing is changed silently.
+- **Protects students.** Student ids are replaced with a keyed hash as soon as the file arrives, and the originals are never stored. Any group with fewer than 10 students is hidden.
+- **Shows what the data says.** A dashboard with trends over time, gaps between student groups, and a simple risk screening score that lists its reasons.
+
+## Implementation details
+
+| Part | What it is |
+|---|---|
+| Core logic | Plain Java with no framework: CSV parser, 21 validation checks, pseudonymization (HMAC SHA 256), analytics, risk score. Package `com.cohortlens.core`. |
+| Backend | Spring Boot 3, Java 17, JPA, Flyway and PostgreSQL. Roles are Viewer, Researcher and Admin. Imports and exports go in an audit log. |
+| Dashboard | React, TypeScript and Vite. Charts are drawn by hand in SVG, with keyboard support, a table view and dark mode. |
+| Data | `scripts/generate_synthetic_data.py` makes seeded fake data, and `--messy` adds about 4 percent errors on purpose. |
+
+Rules in short:
+
+- A row is **rejected** for a missing student or school, a grade outside 0 to 12, a bad term, a score outside 0 to 100, or a repeat of the same student and term.
+- A row is **kept with a warning** for a blank score, a blank incident count (counted as 0), or attendance written as a percent (divided by 100).
+- Trends use a rough 95 percent interval. Gaps are the reference group average minus the comparison group average. The risk score is a transparent point system and is not a validated prediction.
+
+## Result
+
+On the messy sample file (19,514 rows):
+
+- 19,217 rows accepted, 297 rejected, 518 warnings, each one explained in the report.
+- The dashboard found the patterns planted in the synthetic data: one school's income gap narrows from about 7 points to about 2, and another school's attendance slips.
+- 53 Java tests pass for the core logic. The database schema was applied to a real PostgreSQL 16 and its constraints rejected every bad row tried. The dashboard was checked in a browser, and its 6 frontend tests pass.
+
+**Not yet verified:** the Spring Boot layer, the Docker files and the H2 dev profile were written but never compiled or run, because Maven Central was blocked where this was built. Run `cd backend && mvn test` before relying on them.
 
 ## Run it
 
-### Option A: no installs beyond a JDK and Node
-
-Runs the real import, validation and analytics code behind a small in memory server. There is no database and no login. Best for looking around and for working on the dashboard.
+Quickest way, needing only a JDK 17 or newer and Node. It runs the real import and analytics code with no database and no login:
 
 ```bash
 ./scripts/run_dev.sh
 ```
 
-Open http://localhost:5173. The messy sample file is loaded at startup, so the Data tab already shows a validation report.
+Open http://localhost:5173. The messy sample file is loaded at startup.
 
-### Option B: Spring Boot with an in memory database
+With Spring Boot and an in memory database:
 
 ```bash
-cd backend
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
-# in another terminal
+cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=dev
 cd frontend && npm install && npm run dev
 ```
 
-Sign in as `admin` / `admin-dev`, `researcher` / `researcher-dev` or `viewer` / `viewer-dev`. These throwaway credentials exist only in the `dev` profile.
+Sign in as `admin` / `admin-dev`, `researcher` / `researcher-dev` or `viewer` / `viewer-dev`. These credentials exist only in the `dev` profile.
 
-### Option C: Docker Compose with PostgreSQL
-
-```bash
-cp .env.example .env      # then edit every value
-docker compose up --build
-```
-
-Open http://localhost:8080. The app refuses to start if any secret is missing. Use HTTPS in front of it for anything real, because the API uses HTTP Basic authentication.
-
-## What each role can do
-
-| Role | Can do |
-|---|---|
-| Viewer | Aggregate charts only. Small groups hidden. |
-| Researcher | Also the pseudonymized risk list, import reports, and CSV export. |
-| Admin | Also uploads data and reads the audit log. |
+With Docker and PostgreSQL (untested): copy `.env.example` to `.env`, fill in every value, then run `docker compose up --build`.
 
 ## Data format
 
-One row per student per term, with these columns in any order: `student_id`, `school`, `grade`, `academic_year`, `term` (FALL or SPRING), `economic_status` (LOW_INCOME or NOT_LOW_INCOME), `english_learner` (Y or N), `math_score` and `reading_score` (0 to 100), `attendance_rate` (0 to 1, or a percent), `discipline_incidents`.
-
-Rules that reject a row: missing student or school, grade outside 0 to 12, invalid year or term, unknown category, a score outside 0 to 100, attendance outside range, a negative incident count, a wrong column count, and a repeat of the same student and term.
-
-Rules that keep a row but flag it: a blank score or attendance (left empty), a blank incident count (counted as 0), and an attendance written as a percent (divided by 100).
-
-Uploads either **add** new rows (repeats are rejected) or **replace** everything (recorded in the audit log). The whole import runs in one transaction, so a failure leaves the previous data untouched.
-
-## How the analytics work, and their limits
-
-* **Trends.** The mean per term with a 95 percent interval from a normal approximation. The same student appears in many terms, so rows are not independent and the intervals are somewhat too narrow. Read them as a rough guide to noise, not as tests.
-* **Gaps.** The average for the reference group minus the average for the comparison group, with a Welch style interval. These are descriptions, not explanations.
-* **Risk screening.** A transparent point score with the reasons listed for every student. It is a way to decide where to look first. It is not a validated prediction and must not be the only basis for any decision about a student.
-* **Suppression.** Any group with fewer than 10 students returns no numbers at all. The threshold is configurable (`cohortlens.min-cell-size`).
-* **Pseudonymization.** HMAC SHA 256 with a secret you provide. The same id always maps to the same key, so students can be followed across terms. Changing the secret changes every key, so keep it stable and out of source control. Pseudonymized data is still personal data under most privacy rules, so treat it accordingly.
-
-## API
-
-All routes are under `/api`. Filters (`school`, `grade`, `economicStatus`, `englishLearner`) are optional query parameters on every analytics route.
-
-| Route | Role | Returns |
-|---|---|---|
-| `GET /analytics/options` | Viewer | Schools, grades and terms present |
-| `GET /analytics/overview` | Viewer | Counts and period covered |
-| `GET /analytics/trend` | Viewer | Per term means with intervals |
-| `GET /analytics/gaps?dimension=` | Viewer | `ECONOMIC_STATUS` or `ENGLISH_LEARNER` gap per term |
-| `GET /analytics/risk/summary` | Viewer | Risk level counts per school |
-| `GET /analytics/risk/students?limit=` | Researcher | Pseudonymized list with reasons |
-| `POST /imports?filename=&mode=` | Admin | Body is the raw CSV (`text/csv`). Returns the import summary |
-| `GET /imports`, `GET /imports/{id}/issues` | Researcher | History and row level report |
-| `GET /export.csv` | Researcher | Cleaned, pseudonymized data. Audited |
-| `GET /audit` | Admin | Latest 200 audit entries |
-| `GET /me` | Any | Current user and roles |
-
-Example upload:
-
-```bash
-curl -u admin:admin-dev -H "Content-Type: text/csv" --data-binary @data/synthetic_education_messy.csv \
-  "http://localhost:8080/api/imports?filename=messy.csv&mode=REPLACE"
-```
-
-## Project layout
-
-```
-backend/src/main/java/com/cohortlens/
-  core/    Framework free logic: CSV parser, validation, pseudonymization, analytics, risk score
-  dev/     In memory server for local work (development only)
-  app/     Spring Boot: entities, repositories, services, security, controllers
-backend/src/main/resources/db/migration/   Flyway schema (PostgreSQL)
-frontend/src/                              React and TypeScript dashboard, hand built SVG charts
-scripts/generate_synthetic_data.py         Seeded synthetic data with injected errors
-```
-
-The core package has no framework dependencies on purpose. It is where the logic that matters lives, it is easy to test, and both the Spring app and the dev server use the same code.
-
-## Testing and verification status
-
-Stated plainly, because a portfolio project should not overclaim.
-
-| Part | How it was checked | Result |
-|---|---|---|
-| Core Java (parser, validation, pseudonymization, analytics, risk, export, JSON) | 53 JUnit 5 tests, compiled with `--release 17` | Pass |
-| Database schema | Migration applied to a real PostgreSQL 16; bad rows rejected by constraints; 19,440 rows loaded | Pass |
-| Dev server and dashboard | Ran end to end in a headless browser: charts, filters, hover, keyboard, upload, replace and append, suppression, dark mode | Pass |
-| Dashboard code | TypeScript strict mode, production build, 6 unit tests | Pass |
-| **Spring Boot layer** | **Written but not compiled or run in the environment where this was built** (Maven Central was unreachable there) | **Run `mvn test` first** |
-| H2 dev profile | The migration uses portable SQL, but it was only tested on PostgreSQL | Unverified |
-| Dockerfile and Compose file | Written, not built or started | Unverified |
-
-Please run `cd backend && mvn test` before relying on the Spring layer. It includes `ApiSecurityAndImportTest`, which exercises the role rules and the import flow against the H2 database. If something fails, the most likely places are annotation details in `app/` or a column type mismatch reported by Hibernate's schema validation.
-
-Frontend checks:
-
-```bash
-cd frontend && npm test && npm run build
-```
-
-## Accessibility
-
-Charts are hand built SVG with a keyboard mode (arrow keys move between terms), a table view for every chart, a legend for any chart with two or more series, and color pairs checked for color blindness and contrast in both light and dark themes. Risk level is always written out as text, never carried by color alone.
-
-## Ideas for next steps
-
-* Store the pseudonymization secret in a secrets manager and support key rotation.
-* Add a correction endpoint with before and after values in the audit log.
-* Replace HTTP Basic with the university single sign on.
-* Add a mixed effects model that respects repeated measures, to give honest intervals.
+One row per student per term. Columns: `student_id`, `school`, `grade`, `academic_year`, `term` (FALL or SPRING), `economic_status` (LOW_INCOME or NOT_LOW_INCOME), `english_learner` (Y or N), `math_score`, `reading_score`, `attendance_rate`, `discipline_incidents`.
